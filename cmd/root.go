@@ -39,8 +39,8 @@ func init() {
 	}
 	rootCmd.PersistentFlags().StringVar(&logLevel, "logLevel", "error", "application log level")
 	rootCmd.PersistentFlags().StringVar(&serverConfig, "serverConfig", "/etc/rhn/rhn.conf", "Server configuration file")
-	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuProfile", "", "cpuProfile file location")
-	rootCmd.PersistentFlags().StringVar(&memProfile, "memProfile", "", "memProfile file location")
+	rootCmd.PersistentFlags().StringVar(&cpuProfile, "cpuProfile", "", "cpuProfile export folder location")
+	rootCmd.PersistentFlags().StringVar(&memProfile, "memProfile", "", "memProfile export folder location")
 }
 
 func logCallerMarshalFunction(file string, line int) string {
@@ -81,7 +81,7 @@ func logInit() {
 
 func cpuProfileInit() {
 	if cpuProfile != "" {
-		f, err := os.Create(cpuProfile)
+		f, err := os.Create(cpuProfile + "end_cpu_profile.prof")
 		if err != nil {
 			log.Error().Err(err).Msg("could not create CPU profile: ")
 		}
@@ -100,7 +100,7 @@ func cpuProfileTearDown() {
 
 func memProfileDump() {
 	if memProfile != "" {
-		f, err := os.Create(memProfile)
+		f, err := os.Create(memProfile + "/end_memory_profile.prof")
 		if err != nil {
 			log.Error().Err(err).Msg("could not create memory profile: ")
 		}

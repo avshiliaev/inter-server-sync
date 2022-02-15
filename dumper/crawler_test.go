@@ -1,10 +1,11 @@
 package dumper
 
 import (
-	"github.com/uyuni-project/inter-server-sync/schemareader"
-	"github.com/uyuni-project/inter-server-sync/tests"
 	"reflect"
 	"testing"
+
+	"github.com/uyuni-project/inter-server-sync/schemareader"
+	"github.com/uyuni-project/inter-server-sync/tests"
 )
 
 // crawlerTestCase lays down a test scenario for the DataCrawler func
@@ -53,6 +54,7 @@ func TestShouldCreateDataDumper(t *testing.T) {
 		testCase.startTable,
 		testCase.startQueryFilter,
 		"2022-01-01",
+		"./",
 	)
 
 	// Assert

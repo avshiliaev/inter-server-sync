@@ -193,6 +193,8 @@ func processAndInsertProducts(db *sql.DB, writer *bufio.Writer) {
 	}
 
 	dumper.DumpAllTablesData(db, writer, schemaMetadata, startingTables, whereFilterClause, onlyIfParentExistsTables)
+	writer.WriteString("-- end of product tables")
+	writer.WriteString("\n")
 	log.Debug().Msg("products export done")
 }
 
@@ -225,7 +227,7 @@ func processAndInsertChannels(db *sql.DB, writer *bufio.Writer, channels []strin
 func processChannel(db *sql.DB, writer *bufio.Writer, channelLabel string,
 	schemaMetadata map[string]schemareader.Table, options ChannelDumperOptions) {
 	whereFilter := fmt.Sprintf("label = '%s'", channelLabel)
-	tableData := dumper.DataCrawler(db, schemaMetadata, schemaMetadata["rhnchannel"], whereFilter, options.StartingDate)
+	tableData := dumper.DataCrawler(db, schemaMetadata, schemaMetadata["rhnchannel"], whereFilter, options.StartingDate, options.MemoryProfileFolder)
 	log.Debug().Msg("finished table data crawler")
 
 	cleanWhereClause := fmt.Sprintf(`WHERE rhnchannel.id = (SELECT id FROM rhnchannel WHERE label = '%s')`, channelLabel)

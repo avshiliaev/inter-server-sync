@@ -3,7 +3,12 @@ package dumper
 import (
 	"database/sql"
 	"fmt"
+	"os"
+	"runtime/pprof"
 	"strings"
+	"time"
+
+	"github.com/rs/zerolog/log"
 
 	"github.com/uyuni-project/inter-server-sync/schemareader"
 	"github.com/uyuni-project/inter-server-sync/sqlUtil"
@@ -12,11 +17,49 @@ import (
 // DataCrawler will go through all the elements in the initialDataSet an extract related data
 // for all tables presented in the schemaMetadata by following foreign keys and references to the table row
 // The result will be a structure containing ID of each row which should be exported per table
-func DataCrawler(db *sql.DB, schemaMetadata map[string]schemareader.Table, startTable schemareader.Table, startQueryFilter string, startingDate string) DataDumper {
+func DataCrawler(db *sql.DB, schemaMetadata map[string]schemareader.Table, startTable schemareader.Table,
+	startQueryFilter string, startingDate string, memoryProfileFolder string) DataDumper {
 
 	result := DataDumper{make(map[string]TableDump, 0), make(map[string]bool)}
 
 	itemsToProcess := initialDataSet(db, startTable, startQueryFilter)
+
+	go func() {
+		count := 0
+		for {
+			time.Sleep(30 * time.Second)
+			keysSize := 0
+			maxSize := 0
+			table := ""
+			for key, value := range result.TableData {
+				keysSize = keysSize + len(value.KeyMap)
+				if len(value.KeyMap) > maxSize {
+					maxSize = len(value.KeyMap)
+					table = key
+				}
+			}
+			log.Debug().Msgf("#dumper: %d #itemsToProcess: #%d ;  #result: #%d  --> Bigger Table on result: %s: #%d",
+				count, len(itemsToProcess), keysSize, table, maxSize)
+
+			if log.Debug().Enabled() && len(memoryProfileFolder) > 0 {
+
+				f, err := os.Create(fmt.Sprintf(memoryProfileFolder+"/dump_mem_%d.prof", count))
+				if err != nil {
+					log.Error().Err(err).Msg("could not create memory profile: ")
+				}
+				defer f.Close() // error handling omitted for example
+				//runtime.GC()    // get up-to-date statistics
+				if err := pprof.WriteHeapProfile(f); err != nil {
+					log.Error().Err(err).Msg("could not write memory profile: ")
+				}
+			}
+
+			if len(itemsToProcess) == 0 {
+				break
+			}
+			count++
+		}
+	}()
 
 IterateItemsLoop:
 	for len(itemsToProcess) > 0 {
@@ -41,7 +84,7 @@ IterateItemsLoop:
 			resultTableValues = TableDump{TableName: table.Name, KeyMap: make(map[string]bool), Keys: make([]TableKey, 0)}
 		}
 		resultTableValues.KeyMap[keyIdToMap] = true
-		resultTableValues.Keys = append(resultTableValues.Keys, TableKey{keyColumnData})
+		resultTableValues.Keys = append(resultTableValues.Keys, keyColumnData)
 
 		result.TableData[table.Name] = resultTableValues
 		_, okPath := result.Paths[strings.Join(itemToProcess.path, ",")]
@@ -67,27 +110,27 @@ func initialDataSet(db *sql.DB, startTable schemareader.Table, whereFilter strin
 	return initialDataSet
 }
 
-func generateKeyIdToMap(data map[string]string) string {
+func generateKeyIdToMap(data TableKey) string {
 	keyValuesList := make([]string, 0)
-	for _, value := range data {
-		valueStr := fmt.Sprintf("%s", value)
+	for _, value := range data.Key {
+		valueStr := fmt.Sprintf("%s", value.Value)
 		keyValuesList = append(keyValuesList, valueStr)
 	}
 	return strings.Join(keyValuesList, "$$")
 }
 
-func extractRowKeyData(table schemareader.Table, itemToProcess processItem) map[string]string {
-	keyColumnData := make(map[string]string)
+func extractRowKeyData(table schemareader.Table, itemToProcess processItem) TableKey {
+	keys := make([]RowKey, 0)
 	if len(table.PKColumns) > 0 {
 		for pkColumn, _ := range table.PKColumns {
-			keyColumnData[pkColumn] = formatField(itemToProcess.row[table.ColumnIndexes[pkColumn]])
+			keys = append(keys, RowKey{pkColumn, formatField(itemToProcess.row[table.ColumnIndexes[pkColumn]])})
 		}
 	} else {
 		for _, pkColumn := range table.UniqueIndexes[table.MainUniqueIndexName].Columns {
-			keyColumnData[pkColumn] = formatField(itemToProcess.row[table.ColumnIndexes[pkColumn]])
+			keys = append(keys, RowKey{pkColumn, formatField(itemToProcess.row[table.ColumnIndexes[pkColumn]])})
 		}
 	}
-	return keyColumnData
+	return TableKey{keys}
 }
 
 func followReferencesFrom(db *sql.DB, schemaMetadata map[string]schemareader.Table, table schemareader.Table, row processItem, startingDate string) []processItem {

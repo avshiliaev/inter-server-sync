@@ -20,8 +20,11 @@ func PrintTableDataOrdered(db *sql.DB, writer *bufio.Writer, schemaMetadata map[
 	startingTable schemareader.Table, data DataDumper, options PrintSqlOptions) {
 
 	printCleanTables(db, writer, schemaMetadata, startingTable, make(map[string]bool), make([]string, 0), options)
-	printTableData(db, writer, schemaMetadata, data, startingTable, make(map[string]bool), make([]string, 0), options)
-	cache = make(map[string]string)
+	writer.WriteString("-- end of clean tables")
+	writer.WriteString("\n")
+	orderedTables := getTablesExportOrder(schemaMetadata, startingTable, make(map[string]bool), make([]string, 0))
+	exportTableData(db, writer, schemaMetadata, orderedTables, data, options)
+	//printTableData(db, writer, schemaMetadata, data, startingTable, make(map[string]bool), make([]string, 0), options)
 }
 
 /**
@@ -63,51 +66,62 @@ func printCleanTables(db *sql.DB, writer *bufio.Writer, schemaMetadata map[strin
 		}
 		printCleanTables(db, writer, schemaMetadata, tableReference, processedTables, path, options)
 	}
+}
+
+func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table,
+	tablesOrdered []schemareader.Table, data DataDumper, options PrintSqlOptions) {
+
+	for _, table := range tablesOrdered {
+		// export current table data
+		tableData, dataOK := data.TableData[table.Name]
+		if dataOK {
+			exportPoint := 0
+			batch := 100
+			for len(tableData.Keys) > exportPoint {
+				upperLimit := exportPoint + batch
+				if upperLimit > len(tableData.Keys) {
+					upperLimit = len(tableData.Keys)
+				}
+				//myarray := make([]TableKey, 0)
+				//myarray = append(myarray, tableData.Keys[exportPoint:upperLimit]...)
+				//rows := GetRowsFromKeys(db, table, myarray)
+				rows := GetRowsFromKeys(db, table, tableData.Keys[exportPoint:upperLimit])
+				for _, rowValue := range rows {
+					rowToInsert := generateRowInsertStatement(db, rowValue, table, schemaMetadata, options.OnlyIfParentExistsTables)
+					writer.WriteString(rowToInsert + "\n")
+				}
+				writer.Flush()
+				exportPoint = upperLimit
+			}
+		}
+	}
 
 }
 
-func printTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table, data DataDumper,
-	table schemareader.Table, processedTables map[string]bool, path []string, options PrintSqlOptions) {
+func getTablesExportOrder(schemaMetadata map[string]schemareader.Table,
+	table schemareader.Table, processedTables map[string]bool, path []string) []schemareader.Table {
 
 	_, tableProcessed := processedTables[table.Name]
 	// if the current table should not be export we are interrupting the crawler process for these table
 	// not exporting other tables relations
 	if tableProcessed || !table.Export {
-		return
+		return make([]schemareader.Table, 0)
 	}
 	processedTables[table.Name] = true
 	path = append(path, table.Name)
 
 	// follow reference to
+	tablesReferences := make([]schemareader.Table, 0)
 	for _, reference := range table.References {
 		tableReference, ok := schemaMetadata[reference.TableName]
 		if !ok || !tableReference.Export {
 			continue
 		}
-		printTableData(db, writer, schemaMetadata, data, tableReference, processedTables, path, options)
-	}
-
-	// export current table data
-	tableData, dataOK := data.TableData[table.Name]
-	if dataOK {
-		exportPoint := 0
-		batch := 100
-		for len(tableData.Keys) > exportPoint {
-			upperLimit := exportPoint + batch
-			if upperLimit > len(tableData.Keys) {
-				upperLimit = len(tableData.Keys)
-			}
-			rows := GetRowsFromKeys(db, table, tableData.Keys[exportPoint:upperLimit])
-			for _, rowValue := range rows {
-				rowToInsert := generateRowInsertStatement(db, rowValue, table, schemaMetadata, options.OnlyIfParentExistsTables)
-				writer.WriteString(rowToInsert + "\n")
-			}
-
-			exportPoint = upperLimit
-		}
+		tablesReferences = append(tablesReferences, getTablesExportOrder(schemaMetadata, tableReference, processedTables, path)...)
 	}
 
 	// follow reference by
+	tablesReferencesBy := make([]schemareader.Table, 0)
 	for _, reference := range table.ReferencedBy {
 
 		tableReference, ok := schemaMetadata[reference.TableName]
@@ -117,8 +131,10 @@ func printTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]
 		if !shouldFollowReferenceToLink(path, table, tableReference) {
 			continue
 		}
-		printTableData(db, writer, schemaMetadata, data, tableReference, processedTables, path, options)
+		tablesReferencesBy = append(tablesReferencesBy, getTablesExportOrder(schemaMetadata, tableReference, processedTables, path)...)
 	}
+
+	return append(append(tablesReferences, table), tablesReferencesBy...)
 }
 
 // GetRowsFromKeys check if we should move this to a method in the type tableData
@@ -129,14 +145,19 @@ func GetRowsFromKeys(db *sql.DB, table schemareader.Table, keys []TableKey) [][]
 	formattedColumns := strings.Join(table.Columns, ", ")
 
 	columnsFilter := make([]string, 0)
-	for column, _ := range keys[0].Key {
-		columnsFilter = append(columnsFilter, column)
+	for _, value := range keys[0].Key {
+		columnsFilter = append(columnsFilter, value.Column)
 	}
 	values := make([]string, 0)
 	for _, key := range keys {
 		row := make([]string, 0)
 		for _, c := range columnsFilter {
-			row = append(row, key.Key[c])
+			for _, x := range key.Key {
+				if x.Column == c {
+					row = append(row, x.Value)
+					break
+				}
+			}
 		}
 
 		values = append(values, "("+strings.Join(row, ",")+")")

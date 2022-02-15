@@ -2,12 +2,13 @@ package dumper
 
 import (
 	"fmt"
-	"github.com/uyuni-project/inter-server-sync/schemareader"
-	"github.com/uyuni-project/inter-server-sync/sqlUtil"
-	"github.com/uyuni-project/inter-server-sync/tests"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/uyuni-project/inter-server-sync/schemareader"
+	"github.com/uyuni-project/inter-server-sync/sqlUtil"
+	"github.com/uyuni-project/inter-server-sync/tests"
 )
 
 // writerTestCase is a general object for each dumper's recursive method
@@ -275,16 +276,16 @@ func TestPrintTableData(t *testing.T) {
 	testCase.repo.Expect("SELECT id, fk_id FROM v22 WHERE id = $1;", 1)
 
 	// 02 Act
-	printTableData(
-		testCase.repo.DB,
-		testCase.repo.Writer,
-		testCase.schemaMetadata,
-		testCase.dumper,
-		testCase.startingTable,
-		testCase.processedTables,
-		testCase.path,
-		testCase.options,
-	)
+	//	printTableData(
+	//		testCase.repo.DB,
+	//		testCase.repo.Writer,
+	//		testCase.schemaMetadata,
+	//		testCase.dumper,
+	//		testCase.startingTable,
+	//		testCase.processedTables,
+	//		testCase.path,
+	//		testCase.options,
+	//	)
 
 	// 03 Assert
 	if testCase.processedTables == nil {
@@ -326,16 +327,16 @@ func TestPrintTableDataRhnConfigFileCase(t *testing.T) {
 	testCase.repo.Expect("SELECT id, fk_id FROM rhnconfigfile WHERE id = $1;", 1)
 
 	// 02 Act
-	printTableData(
-		testCase.repo.DB,
-		testCase.repo.Writer,
-		testCase.schemaMetadata,
-		testCase.dumper,
-		testCase.startingTable,
-		testCase.processedTables,
-		testCase.path,
-		testCase.options,
-	)
+	//	printTableData(
+	//		testCase.repo.DB,
+	//		testCase.repo.Writer,
+	//		testCase.schemaMetadata,
+	//		testCase.dumper,
+	//		testCase.startingTable,
+	//		testCase.processedTables,
+	//		testCase.path,
+	//		testCase.options,
+	//	)
 
 	// 03 Assert
 	if testCase.processedTables == nil {

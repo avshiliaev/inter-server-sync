@@ -3,12 +3,13 @@ package packageDumper
 import (
 	"database/sql"
 	"fmt"
-	"github.com/uyuni-project/inter-server-sync/dumper"
-	"github.com/uyuni-project/inter-server-sync/schemareader"
 	"io"
 	"log"
 	"os"
 	"path/filepath"
+
+	"github.com/uyuni-project/inter-server-sync/dumper"
+	"github.com/uyuni-project/inter-server-sync/schemareader"
 )
 
 var serverDataFolder = "/var/spacewalk"
@@ -27,12 +28,12 @@ func DumpPackageFiles(db *sql.DB, schemaMetadata map[string]schemareader.Table, 
 			upperLimit = len(packageKeysData.Keys)
 		}
 		rows := dumper.GetRowsFromKeys(db, table, packageKeysData.Keys[exportPoint:upperLimit])
-		for _, rowPackage := range rows{
+		for _, rowPackage := range rows {
 			path := rowPackage[pathIndex]
 			source := fmt.Sprintf("%s/%s", serverDataFolder, path.Value)
 			target := fmt.Sprintf("%s/%s", outputFolder, path.Value)
 			_, error := copy(source, target)
-			if error != nil{
+			if error != nil {
 				log.Fatal("could not Copy File: ", error)
 				panic(error)
 			}

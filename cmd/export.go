@@ -52,6 +52,7 @@ func runExport(cmd *cobra.Command, args []string) {
 		OutputFolder:              outputDir,
 		MetadataOnly:              metadataOnly,
 		StartingDate:              validatedDate,
+		MemoryProfileFolder:       memProfile,
 	}
 	entityDumper.DumpChannelData(options)
 	var versionfile string
