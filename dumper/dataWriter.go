@@ -17,30 +17,15 @@ import (
 )
 
 var cache = make(map[string]string)
-
-var referrencesCall = make(map[string]int)
-
-var cachingTables = map[string]bool{
-	"rhnpackage":        true,
-	"rhnchannel":        true,
-	"rhnchannelfamily":  true,
-	"rhnchecksum":       true,
-	"rhnerrata":         true,
-	"rhnpackageevr":     true,
-	"rhnpackagename":    true,
-	"susemdkeyword":     true,
-	"suseproducts":      true,
-	"susesccrepository": true}
-
-//"rhnchecksum":          true,
-//"rhnpackagecapability": true}
+var referencesCall = make(map[string]int)
 
 func PrintTableDataOrdered(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table,
-	startingTable schemareader.Table, data DataDumper, options PrintSqlOptions) {
+	startingTable schemareader.Table, data *DataDumper, options PrintSqlOptions) {
 
 	printCleanTables(db, writer, schemaMetadata, startingTable, make(map[string]bool), make([]string, 0), options)
-	writer.WriteString("-- end of clean tables")
-	writer.WriteString("\n")
+	_, err := writer.WriteString("-- end of clean tables" + "\n" + "\n")
+	utils.CheckError(err, "Error writing dump to a file")
+
 	orderedTables := getTablesExportOrder(schemaMetadata, startingTable, make(map[string]bool), make([]string, 0))
 	exportTableData(db, writer, schemaMetadata, orderedTables, data, options)
 	// clean cache for the next channel that can be exported
@@ -91,28 +76,9 @@ func printCleanTables(db *sql.DB, writer *bufio.Writer, schemaMetadata map[strin
 }
 
 func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table,
-	tablesOrdered []schemareader.Table, data DataDumper, options PrintSqlOptions) {
+	tablesOrdered []schemareader.Table, data *DataDumper, options PrintSqlOptions) {
 
-	processing := true
-	totalExportedRecords := 0
-	go func() {
-		count := 0
-		totalRecords := 0
-
-		for _, value := range data.TableData {
-			totalRecords = totalRecords + len(value.Keys)
-		}
-
-		for {
-			time.Sleep(30 * time.Second)
-			log.Debug().Msgf("#count: %d #cacheSize %d -- #writtenRows: #%d of %d",
-				count, len(cache), totalExportedRecords, totalRecords)
-			if !processing {
-				break
-			}
-			count++
-		}
-	}()
+	data.StartLogWrittenRows()
 
 	tableCount := 1
 	for _, table := range tablesOrdered {
@@ -128,11 +94,9 @@ func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string
 				if upperLimit > len(tableData.Keys) {
 					upperLimit = len(tableData.Keys)
 				}
-				//myarray := make([]TableKey, 0)
-				//myarray = append(myarray, tableData.Keys[exportPoint:upperLimit]...)
-				//rows := GetRowsFromKeys(db, table, myarray)
 				rows := GetRowsFromKeys(db, table, tableData.Keys[exportPoint:upperLimit])
-				totalExportedRecords = totalExportedRecords + len(rows)
+				// totalExportedRecords = totalExportedRecords + len(rows)
+				data.UpdateTotalExported(len(rows))
 				for _, rowValue := range rows {
 					rowToInsert := generateRowInsertStatement(db, rowValue, table, schemaMetadata, options.OnlyIfParentExistsTables)
 					writer.WriteString(rowToInsert + "\n")
@@ -140,12 +104,11 @@ func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string
 				writer.Flush()
 				exportPoint = upperLimit
 			}
-			//delete(data.TableData, table.Name)
 		}
 	}
-	processing = false
+	data.StopLog()
 
-	valMarshal, errMarshal := json.Marshal(referrencesCall)
+	valMarshal, errMarshal := json.Marshal(referencesCall)
 	if errMarshal == nil {
 		log.Debug().Msg(fmt.Sprintf("Count referrence resolver by table: %s", string(valMarshal)))
 	}
@@ -311,12 +274,7 @@ func substituteForeignKeyReference(db *sql.DB, table schemareader.Table,
 		if len(rows) > 0 {
 			whereParameters = make([]string, 0)
 
-			countVal, findCountVal := referrencesCall[reference.TableName]
-			if !findCountVal {
-				countVal = 0
-			}
-			countVal++
-			referrencesCall[reference.TableName] = countVal
+			referencesCall[reference.TableName]++
 
 			for _, foreignColumn := range foreignMainUniqueColumns {
 				// produce the where clause

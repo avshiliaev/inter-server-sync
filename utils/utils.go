@@ -137,3 +137,10 @@ func ValidateDate(date string) (string, bool) {
 	}
 	return "", false
 }
+
+func CheckError(err error, msg string) {
+	if err != nil {
+		log.Fatal().Err(err).Msg(msg)
+		panic(err)
+	}
+}

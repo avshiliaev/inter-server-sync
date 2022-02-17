@@ -14,7 +14,7 @@ import (
 
 var serverDataFolder = "/var/spacewalk"
 
-func DumpPackageFiles(db *sql.DB, schemaMetadata map[string]schemareader.Table, data dumper.DataDumper, outputFolder string) {
+func DumpPackageFiles(db *sql.DB, schemaMetadata map[string]schemareader.Table, data *dumper.DataDumper, outputFolder string) {
 
 	packageKeysData := data.TableData["rhnpackage"]
 	table := schemaMetadata[packageKeysData.TableName]

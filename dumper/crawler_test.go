@@ -14,7 +14,7 @@ type crawlerTestCase struct {
 	schemaMetadata     MetaDataGraph
 	startTable         schemareader.Table
 	startQueryFilter   string
-	expectedDataDumper DataDumper
+	expectedDataDumper *DataDumper
 }
 
 func TestShouldCreateDataDumper(t *testing.T) {
@@ -54,7 +54,6 @@ func TestShouldCreateDataDumper(t *testing.T) {
 		testCase.startTable,
 		testCase.startQueryFilter,
 		"2022-01-01",
-		"./",
 	)
 
 	// Assert

@@ -3,48 +3,22 @@ package dumper
 import (
 	"database/sql"
 	"fmt"
-	"strings"
-	"time"
-
-	"github.com/rs/zerolog/log"
-
 	"github.com/uyuni-project/inter-server-sync/schemareader"
 	"github.com/uyuni-project/inter-server-sync/sqlUtil"
+	"strings"
 )
 
 // DataCrawler will go through all the elements in the initialDataSet an extract related data
 // for all tables presented in the schemaMetadata by following foreign keys and references to the table row
 // The result will be a structure containing ID of each row which should be exported per table
 func DataCrawler(db *sql.DB, schemaMetadata map[string]schemareader.Table, startTable schemareader.Table,
-	startQueryFilter string, startingDate string, memoryProfileFolder string) DataDumper {
+	startQueryFilter string, startingDate string) *DataDumper {
 
-	result := DataDumper{make(map[string]TableDump, 0), make(map[string]bool)}
+	result := NewDataDumper()
 
 	itemsToProcess := initialDataSet(db, startTable, startQueryFilter)
 
-	go func() {
-		count := 0
-		for {
-			time.Sleep(30 * time.Second)
-			keysSize := 0
-			maxSize := 0
-			table := ""
-			for key, value := range result.TableData {
-				keysSize = keysSize + len(value.KeyMap)
-				if len(value.KeyMap) > maxSize {
-					maxSize = len(value.KeyMap)
-					table = key
-				}
-			}
-			log.Debug().Msgf("#count: %d #rowsToProcess: #%d ;  #rowsToExport: #%d  --> Bigger export table: %s: #%d",
-				count, len(itemsToProcess), keysSize, table, maxSize)
-
-			if len(itemsToProcess) == 0 {
-				break
-			}
-			count++
-		}
-	}()
+	result.StartLogTableSizes(len(itemsToProcess))
 
 IterateItemsLoop:
 	for len(itemsToProcess) > 0 {
@@ -82,6 +56,7 @@ IterateItemsLoop:
 		itemsToProcess = append(itemsToProcess, newItems...)
 
 	}
+	result.StopLog()
 	return result
 }
 

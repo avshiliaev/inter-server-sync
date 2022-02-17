@@ -66,11 +66,11 @@ func logCallerMarshalFunction(file string, line int) string {
 }
 
 func logInit() {
-	syslogger, err := syslog.New(syslog.LOG_INFO|syslog.LOG_DEBUG|syslog.LOG_WARNING|syslog.LOG_ERR, "inter-server-sync")
+	tag := "inter-server-sync"
+	sysLogger, err := syslog.New(syslog.LOG_INFO|syslog.LOG_DEBUG|syslog.LOG_WARNING|syslog.LOG_ERR, tag)
+	sysLogWriter := zerolog.SyslogLevelWriter(sysLogger)
 
-	syslogwriter := zerolog.SyslogLevelWriter(syslogger)
-
-	multi := zerolog.MultiLevelWriter(syslogwriter, os.Stdout)
+	multi := zerolog.MultiLevelWriter(sysLogWriter, os.Stdout)
 	log.Logger = zerolog.New(multi).With().Timestamp().Caller().Logger()
 	zerolog.CallerMarshalFunc = logCallerMarshalFunction
 	level, err := zerolog.ParseLevel(logLevel)

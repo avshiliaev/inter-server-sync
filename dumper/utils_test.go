@@ -1,6 +1,7 @@
 package dumper
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -12,7 +13,7 @@ type MetaDataGraph map[string]schemareader.Table
 
 // initializeMetaDataGraph creates MetaDataGraph and DataDumper in two separate routines, that traverse the TablesGraph
 // from the given root in different orders to get the desired setup
-func initializeMetaDataGraph(graph TablesGraph, root string) (MetaDataGraph, DataDumper) {
+func initializeMetaDataGraph(graph TablesGraph, root string) (MetaDataGraph, *DataDumper) {
 
 	schemaMetadata, dataDumper := createMetaDataGraph(graph)
 	dataDumper.Paths = allPathsPostOrder(graph, root)
@@ -21,12 +22,9 @@ func initializeMetaDataGraph(graph TablesGraph, root string) (MetaDataGraph, Dat
 
 // createMetaDataGraph iterates over each key in the map, then over each value under this key, creates a table in the
 // MetaDataGraph if it does not exist yet, otherwise updates.
-func createMetaDataGraph(graph TablesGraph) (MetaDataGraph, DataDumper) {
+func createMetaDataGraph(graph TablesGraph) (MetaDataGraph, *DataDumper) {
 	schemaMetadata := MetaDataGraph{}
-	dataDumper := DataDumper{
-		TableData: map[string]TableDump{},
-		Paths:     map[string]bool{},
-	}
+	dataDumper := NewDataDumper()
 	var getOrCreateTable = func(name string) schemareader.Table {
 		if _, ok := schemaMetadata[name]; !ok {
 			// create a table and add a referer if there is any
@@ -60,15 +58,15 @@ func createMetaDataGraph(graph TablesGraph) (MetaDataGraph, DataDumper) {
 			schemaMetadata[child] = childTable
 			dataDumper.TableData[child] = TableDump{
 				TableName: child,
-				//KeyMap:    map[string]TableKey{fmt.Sprintf("'%04d'", 1): TableKey{}},
-				//Keys: []TableKey{{Key: map[string]string{"id": fmt.Sprintf("'%04d'", 1)}}},
+				KeyMap:    map[string]bool{fmt.Sprintf("'%04d'", 1): true},
+				Keys:      []TableKey{{Key: []RowKey{{Column: "id", Value: fmt.Sprintf("'%04d'", 1)}}}},
 			}
 		}
 		schemaMetadata[parent] = parentTable
 		dataDumper.TableData[parent] = TableDump{
 			TableName: parent,
-			//KeyMap:    map[string]TableKey{fmt.Sprintf("'%04d'", 1): TableKey{}},
-			//Keys: []TableKey{{Key: map[string]string{"id": fmt.Sprintf("'%04d'", 1)}}},
+			KeyMap:    map[string]bool{fmt.Sprintf("'%04d'", 1): true},
+			Keys:      []TableKey{{Key: []RowKey{{Column: "id", Value: fmt.Sprintf("'%04d'", 1)}}}},
 		}
 	}
 	return schemaMetadata, dataDumper
@@ -115,7 +113,7 @@ func allPathsPostOrder(graph TablesGraph, root string) map[string]bool {
 func setNumberOfRecordsForTable(tc *writerTestCase, tableName string, num int) {
 	var keys []TableKey
 	for i := 0; i < num; i++ {
-		//keys = append(keys, TableKey{Key: map[string]string{"id": fmt.Sprintf("%04d", i+1)}})
+		keys = append(keys, TableKey{Key: []RowKey{{Column: "id", Value: fmt.Sprintf("'%04d'", i+1)}}})
 	}
 	tableData := tc.dumper.TableData[tableName]
 	tableData.Keys = keys

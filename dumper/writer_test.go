@@ -16,7 +16,7 @@ type writerTestCase struct {
 	repo                     *tests.DataRepository
 	schemaMetadata           MetaDataGraph
 	startingTable            schemareader.Table
-	dumper                   DataDumper
+	dumper                   *DataDumper
 	whereFilterClause        func(table schemareader.Table) string
 	processedTables          map[string]bool
 	path                     []string
@@ -276,16 +276,20 @@ func TestPrintTableData(t *testing.T) {
 	testCase.repo.Expect("SELECT id, fk_id FROM v22 WHERE id = $1;", 1)
 
 	// 02 Act
-	//	printTableData(
-	//		testCase.repo.DB,
-	//		testCase.repo.Writer,
-	//		testCase.schemaMetadata,
-	//		testCase.dumper,
-	//		testCase.startingTable,
-	//		testCase.processedTables,
-	//		testCase.path,
-	//		testCase.options,
-	//	)
+	orderedTables := getTablesExportOrder(
+		testCase.schemaMetadata,
+		testCase.startingTable,
+		make(map[string]bool),
+		make([]string, 0),
+	)
+	exportTableData(
+		testCase.repo.DB,
+		testCase.repo.Writer,
+		testCase.schemaMetadata,
+		orderedTables,
+		testCase.dumper,
+		testCase.options,
+	)
 
 	// 03 Assert
 	if testCase.processedTables == nil {
@@ -314,10 +318,10 @@ func TestPrintTableDataRhnConfigFileCase(t *testing.T) {
 	testCase := createTestCase(graph, root, PrintSqlOptions{})
 	setNumberOfRecordsForTable(&testCase, "rhnconfigfile", rhnConfigFileSize)
 
-	// create a WHERE clause of a form 'WHERE (id) in ((0001), (0002)...)'
+	// create a WHERE clause of a form 'WHERE (id) in (('0001'), ('0002')...)'
 	var lookupArray []string
 	for i := 0; i < rhnConfigFileSize; i++ {
-		lookupArray = append(lookupArray, fmt.Sprintf("(%04d)", i+1))
+		lookupArray = append(lookupArray, fmt.Sprintf("('%04d')", i+1))
 	}
 	whereClause := fmt.Sprintf("WHERE (id) in (%s);", strings.Join(lookupArray, ","))
 
@@ -326,17 +330,20 @@ func TestPrintTableDataRhnConfigFileCase(t *testing.T) {
 	testCase.repo.Expect("SELECT id, fk_id FROM root WHERE (id) in (('0001'));", 1)
 	testCase.repo.Expect("SELECT id, fk_id FROM rhnconfigfile WHERE id = $1;", 1)
 
-	// 02 Act
-	//	printTableData(
-	//		testCase.repo.DB,
-	//		testCase.repo.Writer,
-	//		testCase.schemaMetadata,
-	//		testCase.dumper,
-	//		testCase.startingTable,
-	//		testCase.processedTables,
-	//		testCase.path,
-	//		testCase.options,
-	//	)
+	orderedTables := getTablesExportOrder(
+		testCase.schemaMetadata,
+		testCase.startingTable,
+		make(map[string]bool),
+		make([]string, 0),
+	)
+	exportTableData(
+		testCase.repo.DB,
+		testCase.repo.Writer,
+		testCase.schemaMetadata,
+		orderedTables,
+		testCase.dumper,
+		testCase.options,
+	)
 
 	// 03 Assert
 	if testCase.processedTables == nil {
