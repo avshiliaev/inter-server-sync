@@ -3,10 +3,12 @@ package dumper
 import (
 	"bufio"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/rs/zerolog/log"
 	"github.com/uyuni-project/inter-server-sync/sqlUtil"
 
 	"github.com/lib/pq"
@@ -16,6 +18,23 @@ import (
 
 var cache = make(map[string]string)
 
+var referrencesCall = make(map[string]int)
+
+var cachingTables = map[string]bool{
+	"rhnpackage":        true,
+	"rhnchannel":        true,
+	"rhnchannelfamily":  true,
+	"rhnchecksum":       true,
+	"rhnerrata":         true,
+	"rhnpackageevr":     true,
+	"rhnpackagename":    true,
+	"susemdkeyword":     true,
+	"suseproducts":      true,
+	"susesccrepository": true}
+
+//"rhnchecksum":          true,
+//"rhnpackagecapability": true}
+
 func PrintTableDataOrdered(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table,
 	startingTable schemareader.Table, data DataDumper, options PrintSqlOptions) {
 
@@ -24,7 +43,10 @@ func PrintTableDataOrdered(db *sql.DB, writer *bufio.Writer, schemaMetadata map[
 	writer.WriteString("\n")
 	orderedTables := getTablesExportOrder(schemaMetadata, startingTable, make(map[string]bool), make([]string, 0))
 	exportTableData(db, writer, schemaMetadata, orderedTables, data, options)
-	//printTableData(db, writer, schemaMetadata, data, startingTable, make(map[string]bool), make([]string, 0), options)
+	// clean cache for the next channel that can be exported
+	// FIXME consider create a method local cache
+	// other option, set a cache max size, and recreate if reach there
+	cache = make(map[string]string)
 }
 
 /**
@@ -71,8 +93,32 @@ func printCleanTables(db *sql.DB, writer *bufio.Writer, schemaMetadata map[strin
 func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string]schemareader.Table,
 	tablesOrdered []schemareader.Table, data DataDumper, options PrintSqlOptions) {
 
+	processing := true
+	totalExportedRecords := 0
+	go func() {
+		count := 0
+		totalRecords := 0
+
+		for _, value := range data.TableData {
+			totalRecords = totalRecords + len(value.Keys)
+		}
+
+		for {
+			time.Sleep(30 * time.Second)
+			log.Debug().Msgf("#count: %d #cacheSize %d -- #writtenRows: #%d of %d",
+				count, len(cache), totalExportedRecords, totalRecords)
+			if !processing {
+				break
+			}
+			count++
+		}
+	}()
+
+	tableCount := 1
 	for _, table := range tablesOrdered {
 		// export current table data
+		log.Debug().Msg(fmt.Sprintf("Writing data for table [%d/%d] %s", tableCount, len(tablesOrdered), table.Name))
+		tableCount++
 		tableData, dataOK := data.TableData[table.Name]
 		if dataOK {
 			exportPoint := 0
@@ -86,6 +132,7 @@ func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string
 				//myarray = append(myarray, tableData.Keys[exportPoint:upperLimit]...)
 				//rows := GetRowsFromKeys(db, table, myarray)
 				rows := GetRowsFromKeys(db, table, tableData.Keys[exportPoint:upperLimit])
+				totalExportedRecords = totalExportedRecords + len(rows)
 				for _, rowValue := range rows {
 					rowToInsert := generateRowInsertStatement(db, rowValue, table, schemaMetadata, options.OnlyIfParentExistsTables)
 					writer.WriteString(rowToInsert + "\n")
@@ -93,9 +140,15 @@ func exportTableData(db *sql.DB, writer *bufio.Writer, schemaMetadata map[string
 				writer.Flush()
 				exportPoint = upperLimit
 			}
+			//delete(data.TableData, table.Name)
 		}
 	}
+	processing = false
 
+	valMarshal, errMarshal := json.Marshal(referrencesCall)
+	if errMarshal == nil {
+		log.Debug().Msg(fmt.Sprintf("Count referrence resolver by table: %s", string(valMarshal)))
+	}
 }
 
 func getTablesExportOrder(schemaMetadata map[string]schemareader.Table,
@@ -219,7 +272,8 @@ func substituteForeignKey(db *sql.DB, table schemareader.Table, tables map[strin
 	return row
 }
 
-func substituteForeignKeyReference(db *sql.DB, table schemareader.Table, tables map[string]schemareader.Table, reference schemareader.Reference, row []sqlUtil.RowDataStructure) []sqlUtil.RowDataStructure {
+func substituteForeignKeyReference(db *sql.DB, table schemareader.Table,
+	tables map[string]schemareader.Table, reference schemareader.Reference, row []sqlUtil.RowDataStructure) []sqlUtil.RowDataStructure {
 	foreignTable := tables[reference.TableName]
 
 	foreignMainUniqueColumns := foreignTable.UniqueIndexes[foreignTable.MainUniqueIndexName].Columns
@@ -256,6 +310,13 @@ func substituteForeignKeyReference(db *sql.DB, table schemareader.Table, tables 
 		// this can happen when the column for the reference is null. Example rhnchanel->org_id
 		if len(rows) > 0 {
 			whereParameters = make([]string, 0)
+
+			countVal, findCountVal := referrencesCall[reference.TableName]
+			if !findCountVal {
+				countVal = 0
+			}
+			countVal++
+			referrencesCall[reference.TableName] = countVal
 
 			for _, foreignColumn := range foreignMainUniqueColumns {
 				// produce the where clause

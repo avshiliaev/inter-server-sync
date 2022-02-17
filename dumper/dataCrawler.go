@@ -3,8 +3,6 @@ package dumper
 import (
 	"database/sql"
 	"fmt"
-	"os"
-	"runtime/pprof"
 	"strings"
 	"time"
 
@@ -38,21 +36,8 @@ func DataCrawler(db *sql.DB, schemaMetadata map[string]schemareader.Table, start
 					table = key
 				}
 			}
-			log.Debug().Msgf("#dumper: %d #itemsToProcess: #%d ;  #result: #%d  --> Bigger Table on result: %s: #%d",
+			log.Debug().Msgf("#count: %d #rowsToProcess: #%d ;  #rowsToExport: #%d  --> Bigger export table: %s: #%d",
 				count, len(itemsToProcess), keysSize, table, maxSize)
-
-			if log.Debug().Enabled() && len(memoryProfileFolder) > 0 {
-
-				f, err := os.Create(fmt.Sprintf(memoryProfileFolder+"/dump_mem_%d.prof", count))
-				if err != nil {
-					log.Error().Err(err).Msg("could not create memory profile: ")
-				}
-				defer f.Close() // error handling omitted for example
-				//runtime.GC()    // get up-to-date statistics
-				if err := pprof.WriteHeapProfile(f); err != nil {
-					log.Error().Err(err).Msg("could not write memory profile: ")
-				}
-			}
 
 			if len(itemsToProcess) == 0 {
 				break

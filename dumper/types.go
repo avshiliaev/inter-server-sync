@@ -32,4 +32,5 @@ type PrintSqlOptions struct {
 	TablesToClean            []string
 	CleanWhereClause         string
 	OnlyIfParentExistsTables []string
+	MemoryProfileFolder       string
 }

@@ -234,7 +234,8 @@ func processChannel(db *sql.DB, writer *bufio.Writer, channelLabel string,
 	printOptions := dumper.PrintSqlOptions{
 		TablesToClean:            tablesToClean,
 		CleanWhereClause:         cleanWhereClause,
-		OnlyIfParentExistsTables: onlyIfParentExistsTables}
+		OnlyIfParentExistsTables: onlyIfParentExistsTables,
+		MemoryProfileFolder:      options.MemoryProfileFolder}
 
 	dumper.PrintTableDataOrdered(db, writer, schemaMetadata, schemaMetadata["rhnchannel"],
 		tableData, printOptions)
